@@ -1,5 +1,169 @@
 #MICB 447 Team 9 Supplementary R Script
 
+#--------ALPHA AND BETA DIVERSITY FOR IBD Vs HEALTHY SAMPLES---------
+library(ggplot2)
+
+### Alpha diversity functions
+# Shannon's diversity
+shannons = function(x){
+  present = x[x>0]
+  p = present/sum(present)
+  -sum(p*log(p))
+}
+
+### Load data
+biom = import_biom("table-with-taxonomy.biom")
+taxa_table = otu_table(biom)
+taxonomy = tax_table(biom)
+metadata = read.table("dogs_metadata_at_risk.tsv",sep="\t",header=T,row.names = 1)
+
+#select only samples with metadata
+microbial_samples = colnames(taxa_table)
+metadata_samples = rownames(metadata)
+which_metadata = c()
+for (i in 1:dim(taxa_table)[2]){
+  which_metadata = c(which_metadata,which(metadata_samples ==
+                                            microbial_samples[i]))
+}
+metadata = metadata[which_metadata,]
+
+
+### Calculate alpha diversity
+metadata$shannons = apply(taxa_table,2,shannons)
+
+#plot data FIGURE 1A
+### Discrete variable
+graph_disease_stat<-ggplot(metadata,aes(x=disease_stat,y=shannons)) +
+  geom_boxplot(outlier.shape=NA) +
+  geom_point(position=position_jitter(width=0.1))
+graph_disease_stat + labs(x = "disease stat")
+
+#Stats FIGURE 1A
+wilcox.test(shannons ~ disease_stat, data=metadata)
+
+#Beta diversity
+# Loading packages
+library(tidyverse)
+library(vegan)
+library(phyloseq)
+library(DESeq2)
+
+# Helper functions
+gm_mean <- function(x, na.rm = TRUE) {
+  exp(sum(log(x[x > 0]), na.rm = na.rm) / length(x))
+}
+# Combine all objects into phyloseq object
+physeq <- merge_phyloseq(biom, metadata, tree)
+# Overview of phyloseq object
+physeq
+
+# taxonomic rank names
+rank_names(physeq)
+# Rename column names for taxonomic ranks
+colnames(tax_table(physeq)) <- c("Kingdom", "Phylum", "Class",
+                                 "Order", "Family", "Genus",
+                                 "Species")
+rank_names(physeq)
+
+# Beta diversity PCoA plot
+# Diversity requires rarefied taxa tables
+physeq_rar <- rarefy_even_depth(physeq, sample.size = 15000)
+  
+
+# Convert to RA (relative abundance)
+physeq_rar_RA <- transform_sample_counts(physeq_rar, function(x) x/sum(x))
+
+# We define the type of analysis with ordinate() and setting the
+# method = PCoA, setting distance to type of beta diversity analysis
+# you can change analysis to jaccard, bray-curtis and so on
+ord <- ordinate(physeq_rar_RA, method = "PCoA",
+                distance = "wunifrac")
+
+# Plot data for IBD healthy FIGURE 1B
+plot_ordination(physeq_rar_RA,
+                ord,
+                type = "sample",
+                color = "disease_stat",
+                title = "PCoA (Weighted Unifrac)") +
+  
+  # Manually adjust colours for points
+  scale_colour_manual(values = c("#00AFBB", "#E7B800"),
+                      labels = c("healthy", "IBD")) 
+
+
+
+#---ALPHA DIVERSITY ANALYSIS FOR AT-RISK VS NON-AT-RISK BREED GROUPS--------------
+
+#plot data FIGURE 2
+#2 Way ANOVA  
+#Visualise data  
+graph1<-ggboxplot(metadata, x = "at_risk", y = "shannons", color = "disease_stat",
+            add = c("mean_se", "dotplot"),
+            palette = c("#00AFBB", "#E7B800")) 
+graph1 + labs(x = "at risk")
+
+#Compute 2-Way ANOVA for unbalanced designs FIGURE 2
+library(car)
+my_anova <- aov(shannons ~ at_risk * disease_stat, data = metadata)
+Anova(my_anova, type = "III")
+TukeyHSD(my_anova)
+                                        
+ #--------INDIVIDUAL TAXA ANALYSIS FOR AT-RISK VS NON-AT-RISK BREED GROUPS----------
+                                        
+# Keep only abundant ASVs
+# First determine counts of ASV across all samples
+total_counts <- taxa_sums(physeq)
+
+# Calculate relative abundance for each ASV
+relative_abundance <- calculate_RA(total_counts)
+
+# Determine which ASVs are more abundant than 0.1%
+# Change this if you want a different cutoff (0.001 = 0.1%)
+abundant <- relative_abundance > 0.001 
+abundant_taxa <- prune_taxa(abundant, physeq)
+abundant_taxa_filtered<-prune_samples(sample_sums(abundant_taxa)>=5015,abundant_taxa)
+#Throws out all false values and keeps the ones that are true
+# Check the resulting new phyloseq object with much fewer taxa
+abundant_taxa_filtered
+#Double check filtered features 
+sort(sample_sums(abundant_taxa_filtered),decreasing = T)
+# now your phyloseq object is called "Family"
+family <- tax_glom(abundant_taxa_filtered, taxrank = "Family", NArm = FALSE)
+family
+
+# Only keep nonrisk samples
+nonrisk<- subset_samples(family, at_risk == "no")
+nonrisk
+
+# Let's limit to mixed breed samples that we filtered above
+deseq_feature <- phyloseq_to_deseq2(nonrisk, ~ disease_stat)
+# now the rest of the deseq2 code:
+geo_means <- apply(counts(deseq_feature), 1, gm_mean)
+deseq_feature <- estimateSizeFactors(deseq_feature, geoMeans = geo_means)
+deseq_feature <- DESeq(deseq_feature, fitType="local")
+
+feature_diff_abund <- results(deseq_feature)
+# Define your cutoff for the adjusted p-value
+alpha <- 0.05
+# Reformat information as data frame including feature as variable
+significant_feature <- as_tibble(feature_diff_abund, rownames = "feature")
+# Keep only significant results and sort by adjusted p-value
+significant_feature <- filter(significant_feature, padj < alpha) #want only rows that are below alpha
+significant_feature <- arrange(significant_feature, padj)#arrange by smallest to largest p-value; sorted by padj
+
+# Get the taxonomic information as a data frame
+taxa_df <- as_tibble(as.data.frame(tax_table(physeq)), rownames = "feature")
+
+# Combine the significant features with taxonomic classification
+significant_feature <- inner_join(significant_feature, taxa_df)
+dim(significant_feature)
+
+# Plot differential abundance
+significant_feature %>%
+  ggplot(aes(x = log2FoldChange, y = Family)) +
+  geom_col() 
+
+
 # ------- ALPHA DIVERSITY PLOTS FOR DIETARY PROTEIN ---------
 
 setwd("/Users/KristiMacBookAir2015/Desktop/MICB447/alpha")
