@@ -279,7 +279,7 @@ gm_mean <- function(x, na.rm = TRUE) {
 }
 
 # Importing all data files
-biom_file <- import_biom("table-with-taxonomy2.biom")
+biom_file <- import_biom("table-with-taxonomy3.biom")
 metadata <- import_qiime_sample_data("dog_metadata.tsv")
 tree <- read_tree_greengenes("tree.nwk")
 
@@ -304,7 +304,7 @@ colnames(tax_table(physeq)) <- c("Kingdom", "Phylum", "Class",
                                  "Species")
 rank_names(physeq)
 
-# -------------------- PROTEIN SOURCE!!!!! ------------------
+# ---------------------- PROTEIN SOURCE -----------------------
 
 # BETA DIVERSITY
 # Remove "other" and empty rows
@@ -383,7 +383,7 @@ plot_ordination(physeq_rar_RA,
 
 
 
-# -------------------- % CRUDE PROTEIN!!!!! ------------------
+# ------------------------- % CRUDE PROTEIN --------------------------
 
 # Remove "other" and empty rows
 # Filter out data based on metadata category with !=
