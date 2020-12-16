@@ -454,5 +454,164 @@ plot_ordination(physeq_rar_RA,
   stat_ellipse(type = "norm", size = 1) + 
   guides(colour = guide_legend("Percent crude protein")) + 
   theme_bw(base_size = 14)
+                                         
+                                         
+ 
+# ------- ALPHA DIVERSITY PLOTS FOR NEUTER STATUS ---------
+
+# Load CRAN packages
+library(tidyverse)
+library(vegan)
+
+# Load Bioconductor packages
+library(phyloseq)
+library(DESeq2)
+library(ggplot2)
+
+### Alpha diversity functions
+# Shannon's diversity
+shannons = function(x){
+  present = x[x>0]
+  p = present/sum(present)
+  -sum(p*log(p))
+}
+
+# Pielou's evennenss function
+evenness = function(x){
+  present = x[x>0]
+  p = present/sum(present)
+  -sum(p*log(p))/log(sum(x>0))
+}
+
+# richness function
+richness = function(x){
+  return(sum(x>0))
+}
 
 
+# ------- INTACT + HEALTHY ---------                                         
+                                         
+### Load data
+biom = import_biom("/Users/joshuacalalang/Desktop/MICB447_R/Project2/intact_healthy/table-with-taxonomy.biom")
+taxa_table = otu_table(biom)
+taxonomy = tax_table(biom)
+metadata = read.table("/Users/joshuacalalang/Desktop/MICB447_R/Project2/dog_metadata.tsv",sep="\t",header=T,row.names = 1)
+
+microbial_samples = colnames(taxa_table)
+metadata_samples = rownames(metadata)
+which_metadata = c()
+for (i in 1:dim(taxa_table)[2]){
+  which_metadata = c(which_metadata,which(metadata_samples ==
+                                            microbial_samples[i]))
+}
+metadata = metadata[which_metadata,]
+
+### Calculate alpha diversity
+metadata$richness = apply(taxa_table,2,richness)
+metadata$shannons = apply(taxa_table,2,shannons)
+metadata$evenness = apply(taxa_table,2,evenness)
+
+### Discrete variable
+ggplot(metadata,aes(x=sex,y=shannons)) +
+  geom_boxplot(outlier.shape=NA) +
+  geom_point(position=position_jitter(width=0.1)) +
+  xlab("Sex") +
+  ylab("Shannon Diversity")
+
+kruskal.test(shannons ~ sex, data = filter(metadata, sex!=""))
+                                         
+                                         
+# ------- INTACT + IBD ---------
+                                         
+### Load data
+biom = import_biom("/Users/joshuacalalang/Desktop/MICB447_R/Project2/intact_IBD/table-with-taxonomy.biom")
+taxa_table = otu_table(biom)
+taxonomy = tax_table(biom)
+metadata = read.table("/Users/joshuacalalang/Desktop/MICB447_R/Project2/dog_metadata.tsv",sep="\t",header=T,row.names = 1)
+
+microbial_samples = colnames(taxa_table)
+metadata_samples = rownames(metadata)
+which_metadata = c()
+for (i in 1:dim(taxa_table)[2]){
+  which_metadata = c(which_metadata,which(metadata_samples ==
+                                            microbial_samples[i]))
+}
+metadata = metadata[which_metadata,]
+
+### Calculate alpha diversity
+metadata$richness = apply(taxa_table,2,richness)
+metadata$shannons = apply(taxa_table,2,shannons)
+metadata$evenness = apply(taxa_table,2,evenness)
+
+### Discrete variable
+ggplot(metadata,aes(x=sex,y=shannons)) +
+  geom_boxplot(outlier.shape=NA) +
+  geom_point(position=position_jitter(width=0.1)) +
+  xlab("Sex") +
+  ylab("Shannon Diversity")
+
+kruskal.test(shannons ~ sex, data = filter(metadata, sex!=""))                                         
+                                         
+                                    
+# ------- NEUTERED + HEALTHY ---------   
+                                         
+### Load data
+biom = import_biom("/Users/joshuacalalang/Desktop/MICB447_R/Project2/N_healthy/table-with-taxonomy.biom")
+taxa_table = otu_table(biom)
+taxonomy = tax_table(biom)
+metadata = read.table("/Users/joshuacalalang/Desktop/MICB447_R/Project2/dog_metadata.tsv",sep="\t",header=T,row.names = 1)
+
+microbial_samples = colnames(taxa_table)
+metadata_samples = rownames(metadata)
+which_metadata = c()
+for (i in 1:dim(taxa_table)[2]){
+  which_metadata = c(which_metadata,which(metadata_samples ==
+                                            microbial_samples[i]))
+}
+metadata = metadata[which_metadata,]
+
+### Calculate alpha diversity
+metadata$richness = apply(taxa_table,2,richness)
+metadata$shannons = apply(taxa_table,2,shannons)
+metadata$evenness = apply(taxa_table,2,evenness)
+
+### Discrete variable
+ggplot(metadata,aes(x=sex,y=shannons)) +
+  geom_boxplot(outlier.shape=NA) +
+  geom_point(position=position_jitter(width=0.1)) +
+  xlab("Sex") +
+  ylab("Shannon Diversity")
+
+kruskal.test(shannons ~ sex, data = filter(metadata, sex!="")) 
+                                         
+
+# ------- NEUTERED + IBD ---------  
+                                         
+### Load data
+biom = import_biom("/Users/joshuacalalang/Desktop/MICB447_R/Project2/N_IBD/table-with-taxonomy.biom")
+taxa_table = otu_table(biom)
+taxonomy = tax_table(biom)
+metadata = read.table("/Users/joshuacalalang/Desktop/MICB447_R/Project2/dog_metadata.tsv",sep="\t",header=T,row.names = 1)
+
+microbial_samples = colnames(taxa_table)
+metadata_samples = rownames(metadata)
+which_metadata = c()
+for (i in 1:dim(taxa_table)[2]){
+  which_metadata = c(which_metadata,which(metadata_samples ==
+                                            microbial_samples[i]))
+}
+metadata = metadata[which_metadata,]
+
+### Calculate alpha diversity
+metadata$richness = apply(taxa_table,2,richness)
+metadata$shannons = apply(taxa_table,2,shannons)
+metadata$evenness = apply(taxa_table,2,evenness)
+
+### Discrete variable
+ggplot(metadata,aes(x=sex,y=shannons)) +
+  geom_boxplot(outlier.shape=NA) +
+  geom_point(position=position_jitter(width=0.1)) +
+  xlab("Sex") +
+  ylab("Shannon Diversity")
+
+kruskal.test(shannons ~ sex, data = filter(metadata, sex!=""))                                         
