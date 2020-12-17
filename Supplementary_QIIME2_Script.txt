@@ -1,0 +1,685 @@
+#MICB 447 Team 9 Script 
+#Joshua Calalang, Honor Cheung, Kristi Lichimo, Bonny So
+#16 December 2020
+
+# ---------------------------------- AT-RISK BREEDS ----------------------------------
+
+#!/bin/bash
+
+echo “Start”
+
+#Output demultiplexed sequence into the current working directory as a ‘.qza’ file using the following command
+qiime tools import \
+  --type 'SampleData[SequencesWithQuality]' \
+  --input-path /mnt/datasets/project_2/dogs/dog_manifest.txt \
+  --output-path demux.qza \
+  --input-format SingleEndFastqManifestPhred33V2
+
+#Generate a summary of demultiplexing results to determine how many sequences were obtained per sample and view interactive quality plots 
+qiime demux summarize \
+  --i-data demux.qza \
+  --o-visualization demux.qzv
+
+#DADA2 is used for sequence quality control (to denoise and trim sequences) which generates a feature table artifact, representative sequences artifact, and stats artifact  
+qiime dada2 denoise-single \
+  --i-demultiplexed-seqs demux.qza \
+  --p-trim-left 0 \
+  --p-trunc-len 84 \
+  --o-representative-sequences rep-seqs84.qza \
+  --o-table table84.qza \
+  --o-denoising-stats stats84.qza
+
+#This command is used to visualize Golay error correction details in the 'stats84.qza' file 
+qiime metadata tabulate \
+  --m-input-file stats84.qza \
+  --o-visualization stats84.qzv &
+
+#The following command is used to generate FeatureTable and FeatureData summaries 
+qiime feature-table summarize \
+  --i-table table84.qza \
+  --o-visualization table84.qzv \
+  --m-sample-metadata-file /mnt/datasets/project_2/dog/dog_metadata.txt &
+qiime feature-table tabulate-seqs \
+  --i-data rep-seqs84.qza \
+  --o-visualization rep-seqs84.qzv &
+
+#The following commands are used to filter data in the feature table artifact
+
+# scp new metadata w/ at-risk column ‘dog_metadata_at_risk.txt’
+
+#This command is used to filter the metadata to include only subjects who had IBD or were healthy controls 
+qiime feature-table filter-samples \
+  --i-table table84.qza \
+  --m-metadata-file dog_metadata_at_risk.txt \
+  --p-where "[disease_stat] IN ('IBD', 'healthy')" \
+  --o-filtered-table IBD-at-risk-filtered-table.qza
+
+qiime feature-table summarize \
+  --i-table IBD-at-risk-filtered-table.qza \
+  --o-visualization IBD-at-risk-filtered-table.qzv \
+  --m-sample-metadata-file dog_metadata_at_risk.txt
+
+#Rarefy the feature table artifact to a sequencing depth of 15,000
+qiime feature-table rarefy \
+--i-table IBD-at-risk-filtered-table.qza \
+--p-sampling-depth 15000 \
+--o-rarefied-table IBD-at-risk-filtered-table.qza
+
+qiime feature-table summarize \
+  --i-table IBD-at-risk-filtered-table.qza \
+  --o-visualization IBD-at-risk-filtered-table.qzv \
+  --m-sample-metadata-file dog_metadata_at_risk.txt \
+
+#Generate a rooted phylogenetic tree artifact
+qiime phylogeny align-to-tree-mafft-fasttree \
+--i-sequences rep-seqs84.qza \
+--o-alignment aligned-rep-seqs84.qza \
+--o-masked-alignment masked-aligned-rep-seqs84.qza \
+--o-tree unrooted-tree.qza \
+--o-rooted-tree rooted-tree.qza &
+
+#The following commands uses a classifier to assign taxonomy to the sequences from the ‘rep-seqs84.qza’ file and generates a ‘taxonomy97.qza’ file
+
+wget "ftp://greengenes.microbio.me/greengenes_release/gg_13_5/gg_13_8_otus.tar.gz"
+
+gunzip gg_13_8_otus.tar.gz
+
+tar -xvf gg_13_8_otus.tar
+
+qiime tools import \
+  --type 'FeatureData[Sequence]' \
+  --input-path gg_13_8_otus/rep_set/97_otus.fasta \
+  --output-path ref-otus.qza
+
+qiime tools import \
+  --type 'FeatureData[Taxonomy]' \
+  --input-format HeaderlessTSVTaxonomyFormat \
+  --input-path gg_13_8_otus/taxonomy/97_otu_taxonomy.txt \
+  --output-path ref-taxonomy.qza
+
+qiime feature-classifier extract-reads \
+  --i-sequences ref-otus.qza \
+  --p-f-primer GTGCCAGCMGCCGCGGTAA \
+  --p-r-primer GGACTACHVGGGTWTCTAAT \
+  --p-trunc-len 84 \
+  --o-reads ref-seqs.qza
+
+qiime feature-classifier fit-classifier-naive-bayes \
+  --i-reference-reads ref-seqs.qza \
+  --i-reference-taxonomy ref-taxonomy.qza \
+  --o-classifier classifier.qza
+
+qiime feature-classifier classify-sklearn \
+  --i-classifier classifier.qza \
+  --i-reads rep-seqs84.qza \
+  --o-classification taxonomy97.qza
+
+#The following command can be used to visualize the taxon of each feature, displaying the kingdom, phylum, class, order, family, genus, and species levels, while also showing the confidence levels for each classification
+qiime metadata tabulate \
+  --m-input-file taxonomy97.qza \
+  --o-visualization taxonomy97.qzv
+
+#The following command perform ASV-based filtering to remove rare ASVs 
+qiime feature-table filter-features \
+--i-table IBD-at-risk-filtered-table.qza \
+--p-min-frequency 10 \
+--o-filtered-table IBD-at-risk-filtered-table.qza
+
+#This command removes mitochondrial sequences 
+qiime taxa filter-table \
+--i-table IBD-at-risk-filtered-table.qza \
+--i-taxonomy taxonomy97.qza \
+--p-exclude mitochondria \
+--o-filtered-table IBD-at-risk-filtered-table.qza
+
+#The following commands are used to export the generated artifacts for analysis in RStudio 
+
+qiime tools export \
+--input-path IBD-at-risk-filtered-table.qza \
+--output-path exported
+qiime tools export \
+--input-path taxonomy97.qza \
+--output-path exported
+#The columns in the generated taxonomy.tsv need to be edited using the ‘nano’ command 
+#’Feature ID’ needs to be changed to ‘#OTUID’
+#’Taxon’ needs to be changed to ‘taxonomy’
+#’Confidence’ needs to be changed to ‘confidence’
+#Make sure that the column names remain separated by tabs!
+qiime tools export \
+--input-path rooted-tree.qza \
+--output-path exported
+
+#Combine the taxonomy.tsv file and the feature-table.biom file
+biom add-metadata \
+-i exported/feature-table.biom \
+-o exported/table-with-taxonomy.biom \
+--observation-metadata-fp exported/taxonomy.tsv \
+--sc-separated taxonomy
+
+#Use the ‘scp’ command to export the final ‘table-with-taxonomy.biom’ file and ‘tree.nwk’ file to your desktop 
+
+wait
+echo “Done”
+
+# ---------------------------------- DIETARY PROTEIN ----------------------------------
+
+#!/bin/bash
+echo “Start”
+
+#Output demultiplexed sequence into the current working directory as a ‘.qza’ file using the following command
+qiime tools import \
+  --type 'SampleData[SequencesWithQuality]' \
+  --input-path /mnt/datasets/project_2/dogs/dog_manifest.txt \
+  --output-path demux.qza \
+  --input-format SingleEndFastqManifestPhred33V2
+
+#Generate a summary of demultiplexing results to determine how many sequences were obtained per sample and view interactive quality plots 
+qiime demux summarize \
+  --i-data demux.qza \
+  --o-visualization demux.qzv
+
+#DADA2 is used for sequence quality control (to denoise and trim sequences) which generates a feature table artifact, representative sequences artifact, and stats artifact  
+qiime dada2 denoise-single \
+  --i-demultiplexed-seqs demux.qza \
+  --p-trim-left 0 \
+  --p-trunc-len 84 \
+  --o-representative-sequences rep-seqs84.qza \
+  --o-table table84.qza \
+  --o-denoising-stats stats84.qza
+
+#This command is used to visualize Golay error correction details in the 'stats84.qza' file 
+qiime metadata tabulate \
+  --m-input-file stats84.qza \
+  --o-visualization stats84.qzv &
+
+#The following command is used to generate FeatureTable and FeatureData summaries 
+qiime feature-table summarize \
+  --i-table table84.qza \
+  --o-visualization table84.qzv \
+  --m-sample-metadata-file /mnt/datasets/project_2/dog/dog_metadata.txt &
+qiime feature-table tabulate-seqs \
+  --i-data rep-seqs84.qza \
+  --o-visualization rep-seqs84.qzv &
+
+#The following commands are used to filter data in the feature table artifact
+
+qiime feature-table summarize \
+  --i-table table84.qza \
+  --o-visualization table84.qzv \
+  --m-sample-metadata-file /mnt/datasets/project_2/dog/dog_metadata.txt
+
+#Generate a rooted phylogenetic tree artifact
+qiime phylogeny align-to-tree-mafft-fasttree \
+--i-sequences rep-seqs84.qza \
+--o-alignment aligned-rep-seqs84.qza \
+--o-masked-alignment masked-aligned-rep-seqs84.qza \
+--o-tree unrooted-tree.qza \
+--o-rooted-tree rooted-tree.qza &
+
+#Rarefy the feature table artifact to a sequencing depth of 15,000
+qiime feature-table rarefy \
+--i-table table84.qza \
+--p-sampling-depth 15000 \
+--o-rarefied-table table84.qza
+
+#The following commands uses a classifier to assign taxonomy to the sequences from the ‘rep-seqs84.qza’ file and generates a ‘taxonomy97.qza’ file
+
+wget "ftp://greengenes.microbio.me/greengenes_release/gg_13_5/gg_13_8_otus.tar.gz"
+
+gunzip gg_13_8_otus.tar.gz
+
+tar -xvf gg_13_8_otus.tar
+
+qiime tools import \
+  --type 'FeatureData[Sequence]' \
+  --input-path gg_13_8_otus/rep_set/97_otus.fasta \
+  --output-path ref-otus.qza
+
+qiime tools import \
+  --type 'FeatureData[Taxonomy]' \
+  --input-format HeaderlessTSVTaxonomyFormat \
+  --input-path gg_13_8_otus/taxonomy/97_otu_taxonomy.txt \
+  --output-path ref-taxonomy.qza
+
+qiime feature-classifier extract-reads \
+  --i-sequences ref-otus.qza \
+  --p-f-primer GTGCCAGCMGCCGCGGTAA \
+  --p-r-primer GGACTACHVGGGTWTCTAAT \
+  --p-trunc-len 84 \
+  --o-reads ref-seqs.qza
+
+qiime feature-classifier fit-classifier-naive-bayes \
+  --i-reference-reads ref-seqs.qza \
+  --i-reference-taxonomy ref-taxonomy.qza \
+  --o-classifier classifier.qza
+
+qiime feature-classifier classify-sklearn \
+  --i-classifier classifier.qza \
+  --i-reads rep-seqs84.qza \
+  --o-classification taxonomy97.qza
+
+#The following command can be used to visualize the taxon of each feature, displaying the kingdom, phylum, class, order, family, genus, and species levels, while also showing the confidence levels for each classification
+qiime metadata tabulate \
+  --m-input-file taxonomy97.qza \
+  --o-visualization taxonomy97.qzv
+
+#The following command perform ASV-based filtering to remove rare ASVs 
+qiime feature-table filter-features \
+--i-table table84.qza \
+--p-min-frequency 10 \
+--o-filtered-table table84.qza
+
+#This command removes mitochondrial sequences 
+qiime taxa filter-table \
+--i-table table84.qza \
+--i-taxonomy taxonomy97.qza \
+--p-exclude mitochondria \
+--o-filtered-table table84.qza
+
+# Export BIOM data from QIIME2
+# In team_9 directory 
+
+qiime tools export \
+--input-path table84.qza \
+--output-path exported_indicator_taxa
+
+qiime tools export \
+--input-path greengenes97/taxonomy97.qza \
+--output-path exported_indicator_taxa
+
+qiime tools export \
+--input-path rooted-tree.qza \
+--output-path exported_indicator_taxa
+
+#The columns in the generated taxonomy.tsv need to be edited using the ‘nano’ command 
+#’Feature ID’ needs to be changed to ‘#OTUID’
+#’Taxon’ needs to be changed to ‘taxonomy’
+#’Confidence’ needs to be changed to ‘confidence’
+#Make sure that the column names remain separated by tabs!
+
+# Combine taxonomy with BIOM data
+
+biom add-metadata \
+-i exported_indicator_taxa/feature-table.biom \
+-o exported_indicator_taxa/table-with-taxonomy3.biom \
+--observation-metadata-fp exported_indicator_taxa/taxonomy.tsv \
+--sc-separated taxonomy
+
+#Use the ‘scp’ command to export the final ‘table-with-taxonomy3.biom’ file and ‘tree.nwk’ file to your desktop 
+# ALL SUBSEQUENT FILTERING STEPS ARE DONE IN R. See Supplementary R script.
+
+wait
+echo “Done”
+
+# ---------------------------------- NEUTERING STATUS ----------------------------------
+
+#!/bin/bash
+
+echo “Start”
+
+#Output demultiplexed sequence into the current working directory as a ‘.qza’ file using the following command
+qiime tools import \
+  --type 'SampleData[SequencesWithQuality]' \
+  --input-path /mnt/datasets/project_2/dogs/dog_manifest.txt \
+  --output-path demux.qza \
+  --input-format SingleEndFastqManifestPhred33V2
+
+#Generate a summary of demultiplexing results to determine how many sequences were obtained per sample and view interactive quality plots 
+qiime demux summarize \
+  --i-data demux.qza \
+  --o-visualization demux.qzv
+
+#DADA2 is used for sequence quality control (to denoise and trim sequences) which generates a feature table artifact, representative sequences artifact, and stats artifact  
+qiime dada2 denoise-single \
+  --i-demultiplexed-seqs demux.qza \
+  --p-trim-left 0 \
+  --p-trunc-len 84 \
+  --o-representative-sequences rep-seqs84.qza \
+  --o-table table84.qza \
+  --o-denoising-stats stats84.qza
+
+#This command is used to visualize Golay error correction details in the 'stats84.qza' file 
+qiime metadata tabulate \
+  --m-input-file stats84.qza \
+  --o-visualization stats84.qzv &
+
+#The following command is used to generate FeatureTable and FeatureData summaries 
+qiime feature-table summarize \
+  --i-table table84.qza \
+  --o-visualization table84.qzv \
+  --m-sample-metadata-file /mnt/datasets/project_2/dog/dog_metadata.txt &
+qiime feature-table tabulate-seqs \
+  --i-data rep-seqs84.qza \
+  --o-visualization rep-seqs84.qzv &
+
+#The following commands are used to filter data in the feature table artifact
+
+# Filtering metadata to only include disease status of interest
+# Retaining “healthy” samples only 
+qiime feature-table filter-samples \
+--i-table table84.qza \
+--m-metadata-file /mnt/datasets/project_2/dog/dog_metadata.txt \
+--p-where "[disease_stat] IN ('healthy')" \
+--o-filtered-table healthy-ONLY-filtered-table.qza
+
+qiime feature-table summarize \
+--i-table healthy-ONLY-filtered-table.qza \
+--o-visualization healthy-ONLY-filtered-table.qzv \
+--m-sample-metadata-file /mnt/datasets/project_2/dog/dog_metadata.txt
+
+# Retain “IBD” samples only 
+qiime feature-table filter-samples \
+--i-table table84.qza \
+--m-metadata-file /mnt/datasets/project_2/dog/dog_metadata.txt \
+--p-where "[disease_stat] IN ('IBD')" \
+--o-filtered-table IBD-ONLY-filtered-table.qza
+
+qiime feature-table summarize \
+--i-table IBD-ONLY-filtered-table.qza \
+--o-visualization IBD-ONLY-filtered-table.qzv \
+--m-sample-metadata-file /mnt/datasets/project_2/dog/dog_metadata.txt
+
+# Filtering for intact dogs in both disease status groups
+#### INTACT + IBD ####
+qiime feature-table filter-samples \  
+--i-table /data/team_9/IBD-ONLY-filtered-table.qza \  
+--m-metadata-file /mnt/datasets/project_2/dog/dog_metadata.txt \  
+--p-where "[spayed_neutered]='no'" \  
+--o-filtered-table INTACT-AND-IBD-filtered-table.qza
+
+qiime feature-table summarize \
+--i-table /data/team_9/joshua/INTACT-AND-IBD-filtered-table.qza \
+--o-visualization INTACT-AND-IBD-filtered-table.qzv \
+--m-sample-metadata-file /mnt/datasets/project_2/dog/dog_metadata.txt
+
+# Filtering for intact dogs only in both disease status groups
+#### INTACT + HEALTHY ####
+qiime feature-table filter-samples \
+--i-table /data/team_9/healthy-ONLY-filtered-table.qza \
+--m-metadata-file /mnt/datasets/project_2/dog/dog_metadata.txt \
+--p-where "[spayed_neutered]='no'" \
+--o-filtered-table INTACT-AND-HEALTHY-filtered-table.qza
+
+qiime feature-table summarize \
+--i-table /data/team_9/joshua/INTACT-AND-HEALTHY-filtered-table.qza \
+--o-visualization INTACT-AND-HEALTHY-filtered-table.qzv \
+--m-sample-metadata-file /mnt/datasets/project_2/dog/dog_metadata.txt
+
+# Filtering for neutered dogs only in both disease status groups
+#### NEUTERED + IBD ####
+qiime feature-table filter-samples \
+--i-table /data/team_9/IBD-ONLY-filtered-table.qza \
+--m-metadata-file /mnt/datasets/project_2/dog/dog_metadata.txt \
+--p-where "[spayed_neutered]='yes'" \
+--o-filtered-table NEUTERED-AND-IBD-filtered-table.qza
+
+qiime feature-table summarize \
+--i-table /data/team_9/joshua/NEUTERED-AND-IBD-filtered-table.qza \
+--o-visualization NEUTERED-AND-IBD-filtered-table.qzv \
+--m-sample-metadata-file /mnt/datasets/project_2/dog/dog_metadata.txt
+
+#### NEUTERED + HEALTHY ####
+qiime feature-table filter-samples \
+--i-table /data/team_9/healthy-ONLY-filtered-table.qza \
+--m-metadata-file /mnt/datasets/project_2/dog/dog_metadata.txt \
+--p-where "[spayed_neutered]='yes'" \
+--o-filtered-table NEUTERED-AND-HEALTHY-filtered-table.qza
+
+qiime feature-table summarize \
+--i-table /data/team_9/joshua/NEUTERED-AND-HEALTHY-filtered-table.qza \
+--o-visualization NEUTERED-AND-HEALTHY-filtered-table.qzv \
+--m-sample-metadata-file /mnt/datasets/project_2/dog/dog_metadata.txt
+
+#Rarefy the feature table artifact for intact + IBD to a sequencing depth of 15,000
+qiime feature-table rarefy \
+--i-table INTACT-AND-IBD-filtered-table.qza \
+--p-sampling-depth 15000 \
+--o-rarefied-table INTACT-AND-IBD-filtered-table.qza
+
+qiime feature-table summarize \
+  --i-table INTACT-AND-IBD-filtered-table.qza \
+  --o-visualization INTACT-AND-IBD-filtered-table.qzv \
+  --m-sample-metadata-file /mnt/datasets/project_2/dog/dog_metadata.txt \
+
+#Rarefy the feature table artifact for intact + healthy to a sequencing depth of 15,000
+qiime feature-table rarefy \
+--i-table INTACT-AND-HEALTHY-filtered-table.qza \
+--p-sampling-depth 15000 \
+--o-rarefied-table INTACT-AND-HEALTHY-filtered-table.qza
+
+qiime feature-table summarize \
+  --i-table INTACT-AND-HEALTHY-filtered-table.qza \
+  --o-visualization INTACT-AND-HEALTHY-filtered-table.qzv \
+  --m-sample-metadata-file /mnt/datasets/project_2/dog/dog_metadata.txt \
+
+#Rarefy the feature table artifact for neutered + IBD to a sequencing depth of 15,000
+qiime feature-table rarefy \
+--i-table NEUTERED-AND-IBD-filtered-table.qza \
+--p-sampling-depth 15000 \
+--o-rarefied-table NEUTERED-AND-IBD-filtered-table.qza
+
+qiime feature-table summarize \
+  --i-table NEUTERED-AND-IBD-filtered-table.qza \
+  --o-visualization NEUTERED-AND-IBD-filtered-table.qzv \
+  --m-sample-metadata-file /mnt/datasets/project_2/dog/dog_metadata.txt \
+
+#Rarefy the feature table artifact for neutered + healthy to a sequencing depth of 15,000
+qiime feature-table rarefy \
+--i-table NEUTERED-AND-HEALTHY-filtered-table.qza \
+--p-sampling-depth 15000 \
+--o-rarefied-table NEUTERED-AND-HEALTHY-filtered-table.qza
+
+qiime feature-table summarize \
+  --i-table NEUTERED-AND-HEALTHY-filtered-table.qza \
+  --o-visualization NEUTERED-AND-HEALTHY-filtered-table.qzv \
+  --m-sample-metadata-file /mnt/datasets/project_2/dog/dog_metadata.txt \
+
+#Generate a rooted phylogenetic tree artifact
+qiime phylogeny align-to-tree-mafft-fasttree \
+--i-sequences rep-seqs84.qza \
+--o-alignment aligned-rep-seqs84.qza \
+--o-masked-alignment masked-aligned-rep-seqs84.qza \
+--o-tree unrooted-tree.qza \
+--o-rooted-tree rooted-tree.qza &
+
+#The following commands uses a classifier to assign taxonomy to the sequences from the ‘rep-seqs84.qza’ file and generates a ‘taxonomy97.qza’ file
+
+wget "ftp://greengenes.microbio.me/greengenes_release/gg_13_5/gg_13_8_otus.tar.gz"
+
+gunzip gg_13_8_otus.tar.gz
+
+tar -xvf gg_13_8_otus.tar
+
+qiime tools import \
+  --type 'FeatureData[Sequence]' \
+  --input-path gg_13_8_otus/rep_set/97_otus.fasta \
+  --output-path ref-otus.qza
+
+qiime tools import \
+  --type 'FeatureData[Taxonomy]' \
+  --input-format HeaderlessTSVTaxonomyFormat \
+  --input-path gg_13_8_otus/taxonomy/97_otu_taxonomy.txt \
+  --output-path ref-taxonomy.qza
+
+qiime feature-classifier extract-reads \
+  --i-sequences ref-otus.qza \
+  --p-f-primer GTGCCAGCMGCCGCGGTAA \
+  --p-r-primer GGACTACHVGGGTWTCTAAT \
+  --p-trunc-len 84 \
+  --o-reads ref-seqs.qza
+
+qiime feature-classifier fit-classifier-naive-bayes \
+  --i-reference-reads ref-seqs.qza \
+  --i-reference-taxonomy ref-taxonomy.qza \
+  --o-classifier classifier.qza
+
+qiime feature-classifier classify-sklearn \
+  --i-classifier classifier.qza \
+  --i-reads rep-seqs84.qza \
+  --o-classification taxonomy97.qza
+
+#The following command can be used to visualize the taxon of each feature, displaying the kingdom, phylum, class, order, family, genus, and species levels, while also showing the confidence levels for each classification
+qiime metadata tabulate \
+  --m-input-file taxonomy97.qza \
+  --o-visualization taxonomy97.qzv
+
+#The following command perform ASV-based filtering to remove rare ASVs in intact + IBD dogs
+qiime feature-table filter-features \
+--i-table INTACT-AND-IBD-filtered-table.qza \
+--p-min-frequency 10 \
+--o-filtered-tableINTACT-AND-IBD-filtered-table.qza
+
+#This command removed mitochondrial sequences  in intact + IBD dogs
+qiime taxa filter-table \
+--i-tableINTACT-AND-IBD-filtered-table.qza \
+--i-taxonomy taxonomy97.qza \
+--p-exclude mitochondria \
+--o-filtered-table INTACT-AND-IBD-filtered-table.qza
+
+#The following command perform ASV-based filtering to remove rare ASVs in intact + healthy dogs
+qiime feature-table filter-features \
+--i-table INTACT-AND-HEALTHY-filtered-table.qza \
+--p-min-frequency 10 \
+--o-filtered-table INTACT-AND-HEALTHY-filtered-table.qza
+
+#This command removed mitochondrial sequences  in intact + healthy dogs
+qiime taxa filter-table \
+--i-table INTACT-AND-HEALTHY-filtered-table.qza \
+--i-taxonomy taxonomy97.qza \
+--p-exclude mitochondria \
+--o-filtered-table INTACT-AND-HEALTHY-filtered-table.qza
+
+#The following command perform ASV-based filtering to remove rare ASVs in neutered + healthy dogs
+qiime feature-table filter-features \
+--i-table NEUTERED-AND-IBD-filtered-table.qza \
+--p-min-frequency 10 \
+--o-filtered-table NEUTERED-AND-IBD-filtered-table.qza
+
+#This command removed mitochondrial sequences in neutered + healthy dogs
+qiime taxa filter-table \
+--i-table NEUTERED-AND-IBD-filtered-table.qza \
+--i-taxonomy taxonomy97.qza \
+--p-exclude mitochondria \
+--o-filtered-table NEUTERED-AND-IBD-filtered-table.qza
+
+#The following command perform ASV-based filtering to remove rare ASVs in neutered and healthy dogs
+qiime feature-table filter-features \
+--i-table NEUTERED-AND-HEALTHY-filtered-table.qza \
+--p-min-frequency 10 \
+--o-filtered-tableNEUTERED-AND-HEALTHY-filtered-table.qza
+
+#This command removed mitochondrial sequences in neutered and healthy dogs
+qiime taxa filter-table \
+--i-table NEUTERED-AND-HEALTHY-filtered-table.qza \
+--i-taxonomy taxonomy97.qza \
+--p-exclude mitochondria \
+--o-filtered-table NEUTERED-AND-HEALTHY-filtered-table.qza
+
+# EXPORTING NEUTER ANALYSIS DATA
+### NEUTERED + IBD
+# step 1
+qiime tools export \
+--input-path /data/team_9/joshua/NEUTERED-AND-IBD-filtered-table.qza \
+--output-path exported_NEUTERED-AND-IBD
+
+qiime tools export \
+--input-path /data/team_9/greengenes97/taxonomy97.qza \
+--output-path exported_NEUTERED-AND-IBD
+
+qiime tools export \
+--input-path /data/team_9/rooted-tree84.qza \
+--output-path exported_NEUTERED-AND-IBD
+
+# Edit column names of taxonomy.tsv file using nano
+# change:
+# `Feature ID` to `#OTUID`
+# `Taxon` to `taxonomy`
+# `Confidence` to `confidence`
+
+# step 2
+biom add-metadata \
+-i feature-table.biom \
+-o table-with-taxonomy.biom \
+--observation-metadata-fp taxonomy.tsv \
+--sc-separated taxonomy
+
+### INTACT + IBD
+# step 1
+qiime tools export \
+--input-path /data/team_9/joshua/INTACT-AND-IBD-filtered-table.qza \
+--output-path exported_INTACT-AND-IBD
+
+qiime tools export \
+--input-path /data/team_9/rooted-tree84.qza \
+--output-path exported_INTACT-AND-IBD
+
+cd exported_INTACT-AND-IBD && cp /data/team_9/joshua/NEUTERED-AND-IBD/exported_NEUTERED-AND-IBD/taxonomy.tsv .
+
+# Edit column names of taxonomy.tsv file using nano
+# change:
+# `Feature ID` to `#OTUID`
+# `Taxon` to `taxonomy`
+# `Confidence` to `confidence`
+
+# step 2
+biom add-metadata \
+-i feature-table.biom \
+-o table-with-taxonomy.biom \
+--observation-metadata-fp taxonomy.tsv \
+--sc-separated taxonomy
+
+### INTACT + HEALTHY
+# step 1
+qiime tools export \
+--input-path /data/team_9/joshua/INTACT-AND-HEALTHY-filtered-table.qza \
+--output-path exported_INTACT-AND-HEALTHY
+
+qiime tools export \
+--input-path /data/team_9/rooted-tree84.qza \
+--output-path exported_INTACT-AND-HEALTHY
+
+cd exported_INTACT-AND-HEALTHY && cp /data/team_9/joshua/NEUTERED-AND-IBD/exported_NEUTERED-AND-IBD/taxonomy.tsv .
+
+# Edit column names of taxonomy.tsv file using nano
+# change:
+# `Feature ID` to `#OTUID`
+# `Taxon` to `taxonomy`
+# `Confidence` to `confidence`
+
+# step 2
+biom add-metadata \
+-i feature-table.biom \
+-o table-with-taxonomy.biom \
+--observation-metadata-fp taxonomy.tsv \
+--sc-separated taxonomy
+
+### NEUTERED + IBD
+# step 1
+qiime tools export \
+--input-path /data/team_9/joshua/NEUTERED-AND-HEALTHY-filtered-table.qza \
+--output-path exported_NEUTERED-AND-HEALTHY
+
+qiime tools export \
+--input-path /data/team_9/rooted-tree84.qza \
+--output-path exported_NEUTERED-AND-HEALTHY
+
+cd exported_INTACT-AND-HEALTHY
+cp /data/team_9/joshua/NEUTERED-AND-IBD/exported_NEUTERED-AND-IBD/taxonomy.tsv .
+
+# Edit column names of taxonomy.tsv file using nano
+# change:
+# `Feature ID` to `#OTUID`
+# `Taxon` to `taxonomy`
+# `Confidence` to `confidence`
+
+# step 2
+biom add-metadata \
+-i feature-table.biom \
+-o table-with-taxonomy.biom \
+--observation-metadata-fp taxonomy.tsv \
+--sc-separated taxonomy
+
+#Use the ‘scp’ command to export the final ‘table-with-taxonomy.biom’ file and ‘tree.nwk’ files from each neuter status + disease status combination to local desktop 
+
+wait
+echo “Done”
