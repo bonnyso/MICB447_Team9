@@ -1,4 +1,6 @@
 #MICB 447 Team 9 Supplementary R Script
+#Joshua Calalang, Honor Cheung, Kristi Lichimo, Bonny So
+#16 December 2020
 
 #--------ALPHA AND BETA DIVERSITY FOR IBD Vs HEALTHY SAMPLES---------
 library(ggplot2)
