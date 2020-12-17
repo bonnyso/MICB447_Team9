@@ -2,7 +2,7 @@
 
 This repository contains scripts used to create the analyses in a paper written by Joshua Calalang, Honor Cheung, Kristi Lichimo, and Bonny So.   
 
-## Supplementary Scripts 
+## Supplemental Scripts 
 The Supplementary_QIIME2_Script.txt file summarizes the preliminary data processing steps performed in QIIME2 and the Supplementary_R_Script.R file summarizes the data and statistical analyses performed in RStudio.  
 
 ## Metadata 
