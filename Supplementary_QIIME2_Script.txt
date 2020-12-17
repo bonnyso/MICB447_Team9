@@ -1,4 +1,4 @@
-#MICB 447 Team 9 Script 
+#MICB 447 Team 9 Supplemental QIIME 2 Script 
 #Joshua Calalang, Honor Cheung, Kristi Lichimo, Bonny So
 #16 December 2020
 
