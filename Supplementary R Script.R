@@ -1,4 +1,4 @@
-#MICB 447 Team 9 Supplementary R Script
+#MICB 447 Team 9 Supplementary R Script 
 #Joshua Calalang, Honor Cheung, Kristi Lichimo, Bonny So
 #16 December 2020
 
