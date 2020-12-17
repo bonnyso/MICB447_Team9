@@ -108,7 +108,7 @@ my_anova <- aov(shannons ~ at_risk * disease_stat, data = metadata)
 Anova(my_anova, type = "III")
 TukeyHSD(my_anova)
                                         
- #--------INDIVIDUAL TAXA ANALYSIS FOR AT-RISK VS NON-AT-RISK BREED GROUPS----------
+ #--------DIFFERENTIAL ABUNDANCE ANALYSIS FOR AT-RISK VS NON-AT-RISK BREED GROUPS----------
                                         
 # Keep only abundant ASVs
 # First determine counts of ASV across all samples
