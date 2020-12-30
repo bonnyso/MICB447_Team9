@@ -323,8 +323,6 @@ no_other_empty_15000
 
 # Beta diversity PCoA plot
 # Diversity requires rarefied taxa tables
-# We know from Qiime that we should rarefy to 1250 so right palm
-# samples level out
 physeq_rar <- rarefy_even_depth(no_other_empty_15000, sample.size = 4000)
 
 # Convert to RA (relative abundance)
@@ -398,8 +396,7 @@ no_empty_15000
 
 # Beta diversity PCoA plot
 # Diversity requires rarefied taxa tables
-# We know from Qiime that we should rarefy to 1250 so right palm
-# samples level out
+
 physeq_rar <- rarefy_even_depth(no_empty_15000, sample.size = 4000)
 
 # Convert to RA (relative abundance)
