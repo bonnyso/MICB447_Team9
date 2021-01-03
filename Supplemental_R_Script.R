@@ -613,4 +613,311 @@ ggplot(metadata,aes(x=sex,y=shannons)) +
   xlab("Sex") +
   ylab("Shannon Diversity")
 
-kruskal.test(shannons ~ sex, data = filter(metadata, sex!=""))                                         
+kruskal.test(shannons ~ sex, data = filter(metadata, sex!=""))
+                                         
+ 
+# ------- SUPPLEMENTAL BETA DIVERSITY PLOTS FOR NEUTER STATUS ---------                                         
+                                         
+# Loading packages
+library(tidyverse)
+library(vegan)
+library(phyloseq)
+library(DESeq2)
+
+# Helper functions
+gm_mean <- function(x, na.rm = TRUE) {  
+  exp(sum(log(x[x > 0]), na.rm = na.rm) / length(x)) }
+
+# ------- INTACT + HEALTHY ---------                                         
+                                         
+# Importing all data files
+biome_file <- import_biom("/Users/joshuacalalang/Desktop/MICB447_R/Project2/intact_healthy/table-with-taxonomy.biom") # recall: need to use quotation marks to specify file path
+metadata <- import_qiime_sample_data("/Users/joshuacalalang/Desktop/MICB447_R/Project2/dog_metadata.tsv")
+tree <- read_tree_greengenes("/Users/joshuacalalang/Desktop/MICB447_R/Project2/intact_healthy/tree.nwk")
+
+# Combining all objects into phyloseq object
+physeq <- merge_phyloseq(biome_file, metadata, tree)
+
+# Overview of phyloseq object
+physeq 
+
+# head function allows us to only look at first 6 lines
+head(sample_data(physeq)) # sample_data() allows us to look at the metadata of phyloseq object
+
+# Set set of random numbers (to make downstream analysis reproducible)
+set.seed(711)
+
+# taxonomic rank names
+rank_names(physeq)
+
+# Shows us first 6 lines [optional]
+head(tax_table(physeq))
+
+# Renaming the column names 
+colnames(tax_table(physeq)) <- c("Kingdom", "Phylum", "Class",
+                                 "Order", "Family", "Genus", "Species")
+
+# Beta diversity PCoA plot
+# Diversity analysis requires rarefied datataxa tables
+# rarefaction:
+physeq_rar <- rarefy_even_depth(physeq, sample.size = 3000) 
+
+# Convert to RA (relative abundance)
+physeq_rar_RA <- transform_sample_counts(physeq_rar, function(x) x/sum(x))
+
+# We define the type of analysis using " ordinate() " and setting the 
+  # method = PCoA, and also setting the distance to type of beta diversity analysis
+# you can change analysis to jaccard, bray-curtis, and so on
+ord <- ordinate(physeq_rar_RA, method = "PCoA", distance = "wunifrac")
+
+# Plot data
+plot_ordination(physeq_rar_RA, 
+                ord, 
+                type = "samples", 
+                color = "sex", 
+                title = "PcoA (Weighted Unifrac)") +
+  
+  # Adding text to plot
+  annotate(geom = "text", 
+           label = "",
+           x = -0.08,
+           y = 0.18,
+           size = 4) + 
+
+# Adding elipses
+stat_ellipse(type = "norm", size = 0.5) + # the size value specifies thickness of the ellipses line
+  
+guides(colour = guide_legend("Sex")) + # changing legend title
+  
+  theme_bw(base_size = 14) # changing background colour
+
+                                         
+# ------- INTACT + IBD ---------                                           
+                                         
+# Importing all data files
+biome_file <- import_biom("/Users/joshuacalalang/Desktop/MICB447_R/Project2/intact_IBD/table-with-taxonomy.biom") # recall: need to use quotation marks to specify file path
+metadata <- import_qiime_sample_data("/Users/joshuacalalang/Desktop/MICB447_R/Project2/dog_metadata.tsv")
+tree <- read_tree_greengenes("/Users/joshuacalalang/Desktop/MICB447_R/Project2/intact_IBD/tree.nwk")
+
+# Combining all objects into phyloseq object
+physeq <- merge_phyloseq(biome_file, metadata, tree)
+
+# Overview of phyloseq object
+physeq 
+
+# head function allows us to only look at first 6 lines
+head(sample_data(physeq)) # sample_data() allows us to look at the metadata of phyloseq object
+
+# Set set of random numbers (to make downstream analysis reproducible)
+set.seed(711)
+
+# taxonomic rank names
+rank_names(physeq)
+
+# Shows us first 6 lines [optional]
+head(tax_table(physeq))
+
+# Renaming the column names 
+colnames(tax_table(physeq)) <- c("Kingdom", "Phylum", "Class",
+                                 "Order", "Family", "Genus", "Species")
+
+# Filter data based on metadata category with " == " [useful!!!]
+spn <- subset_samples(physeq, spayed_neutered ==  "yes")
+
+# Format data as table with as.data.frame()
+as.data.frame(sample_names(spn))
+
+# Show read count for each sample using " sample_sums() "
+as.data.frame(sample_sums(spn))
+
+# Exclude samples with less than 15000 reads
+spn_15000 <- prune_samples(sample_sums(spn) >= 15000, spn)
+spn_15000
+
+# Beta diversity PCoA plot
+# Diversity analysis requires rarefied datataxa tables
+# rarefaction:
+physeq_rar <- rarefy_even_depth(physeq, sample.size = 3000) 
+
+# Convert to RA (relative abundance)
+physeq_rar_RA <- transform_sample_counts(physeq_rar, function(x) x/sum(x))
+
+# We define the type of analysis using " ordinate() " and setting the 
+  # method = PCoA, and also setting the distance to type of beta diversity analysis
+# you can change analysis to jaccard, bray-curtis, and so on
+ord <- ordinate(physeq_rar_RA, method = "PCoA", distance = "wunifrac")
+
+# Plot data
+plot_ordination(physeq_rar_RA, 
+                ord, 
+                type = "samples", 
+                color = "sex", 
+                title = "PcoA (Weighted Unifrac)") +
+  
+  # Adding text to plot
+  annotate(geom = "text", 
+           label = "",
+           x = -0.08,
+           y = 0.18,
+           size = 4) + 
+
+# Adding elipses
+stat_ellipse(type = "norm", size = 0.5) + # the size value specifies thickness of the ellipses line
+  
+guides(colour = guide_legend("Sex")) + # changing legend title
+  
+  theme_bw(base_size = 14) # changing background colour
+
+                                         
+# ------- NEUTERED + HEALTHY ---------   
+# Importing all data files
+biome_file <- import_biom("/Users/joshuacalalang/Desktop/MICB447_R/Project2/N_healthy/table-with-taxonomy.biom") # recall: need to use quotation marks to specify file path
+metadata <- import_qiime_sample_data("/Users/joshuacalalang/Desktop/MICB447_R/Project2/dog_metadata.tsv")
+tree <- read_tree_greengenes("/Users/joshuacalalang/Desktop/MICB447_R/Project2/N_healthy/tree.nwk")
+
+# Combining all objects into phyloseq object
+physeq <- merge_phyloseq(biome_file, metadata, tree)
+
+# Overview of phyloseq object
+physeq 
+
+# head function allows us to only look at first 6 lines
+head(sample_data(physeq)) # sample_data() allows us to look at the metadata of phyloseq object
+
+# Set set of random numbers (to make downstream analysis reproducible)
+set.seed(711)
+
+# taxonomic rank names
+rank_names(physeq)
+
+# Shows us first 6 lines [optional]
+head(tax_table(physeq))
+
+# Renaming the column names 
+colnames(tax_table(physeq)) <- c("Kingdom", "Phylum", "Class",
+                                 "Order", "Family", "Genus", "Species")
+
+# Filter data based on metadata category with " == " [useful!!!]
+spn <- subset_samples(physeq, spayed_neutered ==  "yes")
+
+# Format data as table with as.data.frame()
+as.data.frame(sample_names(spn))
+
+# Show read count for each sample using " sample_sums() "
+as.data.frame(sample_sums(spn))
+
+# Exclude samples with less than 15000 reads
+spn_15000 <- prune_samples(sample_sums(spn) >= 15000, spn)
+spn_15000
+
+# Beta diversity PCoA plot
+# Diversity analysis requires rarefied datataxa tables
+# rarefaction:
+physeq_rar <- rarefy_even_depth(physeq, sample.size = 3000) 
+
+# Convert to RA (relative abundance)
+physeq_rar_RA <- transform_sample_counts(physeq_rar, function(x) x/sum(x))
+
+# We define the type of analysis using " ordinate() " and setting the 
+# method = PCoA, and also setting the distance to type of beta diversity analysis
+# you can change analysis to jaccard, bray-curtis, and so on
+ord <- ordinate(physeq_rar_RA, method = "PCoA", distance = "wunifrac")
+
+# Plot data
+plot_ordination(physeq_rar_RA, 
+                ord, 
+                type = "samples", 
+                color = "sex", 
+                title = "PcoA (Weighted Unifrac)") +
+  
+  # Adding text to plot
+  annotate(geom = "text", 
+           label = "",
+           x = -0.08,
+           y = 0.18,
+           size = 4) + 
+  
+  # Adding elipses
+  stat_ellipse(type = "norm", size = 0.5) + # the size value specifies thickness of the ellipses line
+  
+  guides(colour = guide_legend("Sex")) + # changing legend title
+  
+  theme_bw(base_size = 14) # changing background colour
+                                         
+                                         
+# ------- NEUTERED + IBD ---------                                        
+# Importing all data files
+biome_file <- import_biom("/Users/joshuacalalang/Desktop/MICB447_R/Project2/N_IBD/table-with-taxonomy.biom") # recall: need to use quotation marks to specify file path
+metadata <- import_qiime_sample_data("/Users/joshuacalalang/Desktop/MICB447_R/Project2/dog_metadata.tsv")
+tree <- read_tree_greengenes("/Users/joshuacalalang/Desktop/MICB447_R/Project2/N_IBD/tree.nwk")
+
+# Combining all objects into phyloseq object
+physeq <- merge_phyloseq(biome_file, metadata, tree)
+
+# Overview of phyloseq object
+physeq 
+
+# head function allows us to only look at first 6 lines
+head(sample_data(physeq)) # sample_data() allows us to look at the metadata of phyloseq object
+
+# Set set of random numbers (to make downstream analysis reproducible)
+set.seed(711)
+
+# taxonomic rank names
+rank_names(physeq)
+
+# Shows us first 6 lines [optional]
+head(tax_table(physeq))
+
+# Renaming the column names 
+colnames(tax_table(physeq)) <- c("Kingdom", "Phylum", "Class",
+                                 "Order", "Family", "Genus", "Species")
+
+# Filter data based on metadata category with " == " [useful!!!]
+spn <- subset_samples(physeq, spayed_neutered ==  "yes")
+
+# Format data as table with as.data.frame()
+as.data.frame(sample_names(spn))
+
+# Show read count for each sample using " sample_sums() "
+as.data.frame(sample_sums(spn))
+
+# Exclude samples with less than 15000 reads
+spn_15000 <- prune_samples(sample_sums(spn) >= 15000, spn)
+spn_15000
+
+# Beta diversity PCoA plot
+# Diversity analysis requires rarefied datataxa tables
+# rarefaction:
+physeq_rar <- rarefy_even_depth(physeq, sample.size = 3000) 
+
+# Convert to RA (relative abundance)
+physeq_rar_RA <- transform_sample_counts(physeq_rar, function(x) x/sum(x))
+
+# We define the type of analysis using " ordinate() " and setting the 
+# method = PCoA, and also setting the distance to type of beta diversity analysis
+# you can change analysis to jaccard, bray-curtis, and so on
+ord <- ordinate(physeq_rar_RA, method = "PCoA", distance = "wunifrac")
+
+# Plot data
+plot_ordination(physeq_rar_RA, 
+                ord, 
+                type = "samples", 
+                color = "sex", 
+                title = "PcoA (Weighted Unifrac)") +
+  
+  # Adding text to plot
+  annotate(geom = "text", 
+           label = "",
+           x = -0.08,
+           y = 0.18,
+           size = 4) + 
+  
+  # Adding elipses
+  stat_ellipse(type = "norm", size = 0.5) + # the size value specifies thickness of the ellipses line
+  
+  guides(colour = guide_legend("Sex")) + # changing legend title
+  
+  theme_bw(base_size = 14) # changing background colour                                         
+                                         
+                                         
