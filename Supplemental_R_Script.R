@@ -2,7 +2,7 @@
 #Joshua Calalang, Honor Cheung, Kristi Lichimo, Bonny So
 #16 December 2020
 
-#--------ALPHA AND BETA DIVERSITY FOR IBD Vs HEALTHY SAMPLES---------
+#-------- ALPHA AND BETA DIVERSITY FOR IBD Vs HEALTHY SAMPLES ---------
 library(ggplot2)
 
 ### Alpha diversity functions
@@ -94,7 +94,7 @@ plot_ordination(physeq_rar_RA,
 
 
 
-#---ALPHA DIVERSITY ANALYSIS FOR AT-RISK VS NON-AT-RISK BREED GROUPS--------------
+#-------- ALPHA DIVERSITY ANALYSIS FOR AT-RISK VS NON-AT-RISK BREED GROUPS -----------
 
 #plot data FIGURE 2
 #2 Way ANOVA  
@@ -110,7 +110,7 @@ my_anova <- aov(shannons ~ at_risk * disease_stat, data = metadata)
 Anova(my_anova, type = "III")
 TukeyHSD(my_anova)
                                         
- #--------DIFFERENTIAL ABUNDANCE ANALYSIS FOR AT-RISK VS NON-AT-RISK BREED GROUPS----------
+#-------- DIFFERENTIAL ABUNDANCE ANALYSIS FOR AT-RISK VS NON-AT-RISK BREED GROUPS ----------
                                         
 # Keep only abundant ASVs
 # First determine counts of ASV across all samples
@@ -137,7 +137,7 @@ family
 nonrisk<- subset_samples(family, at_risk == "no")
 nonrisk
 
-# Let's limit to mixed breed samples that we filtered above
+# Let's limit the samples that we filtered above
 deseq_feature <- phyloseq_to_deseq2(nonrisk, ~ disease_stat)
 # now the rest of the deseq2 code:
 geo_means <- apply(counts(deseq_feature), 1, gm_mean)
@@ -165,7 +165,10 @@ significant_feature %>%
   ggplot(aes(x = log2FoldChange, y = Family)) +
   geom_col() 
 
-
+# Repeat the process for at-risk samples replacing instances of 'nonrisk' with the following:
+atrisk <- subset_samples(family, at_risk == "yes")
+atrisk
+                                         
 # ------- ALPHA DIVERSITY PLOTS FOR DIETARY PROTEIN ---------
 
 setwd("/Users/KristiMacBookAir2015/Desktop/MICB447/alpha")
